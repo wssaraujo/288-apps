@@ -1,0 +1,8 @@
+{
+    "name": "example/s2i-php-example",
+    "description": "Simple PHP site for OpenShift S2I testing",
+    "type": "project",
+    "require": {
+        "php": ">=8.0 <9.0"
+    }
+}

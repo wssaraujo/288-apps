@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>S2I Demo</title>
+  <!--
+    Shared UI for all S2I example apps. Edit shared/index.html and run
+    ./sync-ui.sh to copy it into every app. Every value is loaded from
+    GET /api/info, so the page is identical in every stack.
+  -->
+  <style>
+    :root {
+      --accent: #ee0000;
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --surface-2: #f0f1f4;
+      --text: #151515;
+      --muted: #6a6e73;
+      --border: #e0e2e6;
+      --ok: #1e8f4e;
+      --bad: #c9190b;
+      --radius: 12px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1114;
+        --surface: #181b20;
+        --surface-2: #22262c;
+        --text: #e8eaed;
+        --muted: #9aa0a6;
+        --border: #2c3138;
+        --ok: #4cc47f;
+        --bad: #ff6b5e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    code, .mono { font-family: var(--mono); font-size: 13px; }
+
+    header {
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #000));
+      color: #fff;
+      padding: 40px 16px 72px;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3);
+      padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #7dffae; box-shadow: 0 0 0 3px rgba(125,255,174,.3); }
+    .dot.off { background: #ffb3ab; box-shadow: 0 0 0 3px rgba(255,179,171,.3); }
+    h1 { font-size: clamp(26px, 4vw, 40px); margin: 16px 0 6px; line-height: 1.15; }
+    header p { margin: 0; opacity: .85; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 20px; font-size: 14px; }
+    .hero-meta b { font-family: var(--mono); font-weight: 600; }
+
+    main { margin-top: -44px; padding: 0 16px 48px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+    .span-2 { grid-column: span 2; }
+    @media (max-width: 660px) { .span-2 { grid-column: auto; } }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+      min-width: 0;
+    }
+    .card h2 {
+      font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+      margin: 0 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
+    dt { color: var(--muted); }
+    dd { margin: 0; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+    .big { font-size: 34px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+    .hint { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+    .cmd {
+      position: relative; background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 44px 10px 12px; margin-top: 10px;
+      font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere;
+    }
+    .cmd button { position: absolute; top: 6px; right: 6px; padding: 2px 8px; font-size: 12px; }
+
+    button, select, input {
+      font: inherit; font-size: 14px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface-2); color: var(--text); padding: 7px 12px;
+    }
+    button { cursor: pointer; font-weight: 600; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button:disabled { opacity: .55; cursor: progress; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .pill.ok  { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+    .pill.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+    .probe { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .probe:last-of-type { border-bottom: 0; }
+
+    .bars { display: grid; gap: 8px; margin-top: 14px; }
+    .bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; font-size: 13px; }
+    .bar .name { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar .track { grid-column: 1 / -1; height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+    .bar .fill { height: 100%; border-radius: 5px; transition: width .25s; }
+    .strip { display: flex; gap: 3px; margin-top: 14px; min-height: 14px; flex-wrap: wrap; }
+    .strip span { width: 14px; height: 14px; border-radius: 3px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    td { font-family: var(--mono); overflow-wrap: anywhere; }
+    .empty { color: var(--muted); font-style: italic; font-family: inherit; }
+
+    .endpoints { display: flex; flex-wrap: wrap; gap: 8px; }
+    .endpoints a {
+      text-decoration: none; color: var(--text); background: var(--surface-2); border: 1px solid var(--border);
+      padding: 6px 10px; border-radius: 8px; font-family: var(--mono); font-size: 13px;
+    }
+    .endpoints a:hover { border-color: var(--accent); }
+    .endpoints .m { color: var(--accent); font-weight: 700; margin-right: 6px; }
+
+    .toast {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(120%);
+      background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 8px;
+      transition: transform .2s; font-size: 14px; max-width: calc(100% - 32px);
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    footer { text-align: center; color: var(--muted); font-size: 13px; padding: 0 16px 32px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <span class="badge"><span class="dot" id="live-dot"></span><span data-k="stack">Loading…</span> · <span data-k="framework"></span></span>
+      <h1 data-k="message">Hello from OpenShift!</h1>
+      <p>Built with Source-to-Image (S2I) · served by pod <b class="mono" data-k="pod.hostname">…</b></p>
+      <div class="hero-meta">
+        <span>Runtime <b data-k="runtime"></b></span>
+        <span>Namespace <b data-k="pod.namespace"></b></span>
+        <span>Uptime <b data-k="process.uptimeSeconds" data-fmt="duration"></b></span>
+        <span>Requests served <b data-k="requests"></b></span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap grid">
+
+      <section class="card">
+        <h2>Pod</h2>
+        <dl>
+          <dt>Hostname</dt><dd data-k="pod.hostname"></dd>
+          <dt>Pod IP</dt><dd data-k="pod.ip"></dd>
+          <dt>Namespace</dt><dd data-k="pod.namespace"></dd>
+          <dt>Node</dt><dd data-k="pod.node"></dd>
+        </dl>
+        <p class="hint">Set the node name with the Downward API:</p>
+        <div class="cmd">oc set env deployment/<span class="deploy"></span> --from=fieldRef:spec.nodeName NODE_NAME=</div>
+      </section>
+
+      <section class="card">
+        <h2>Runtime</h2>
+        <dl>
+          <dt>Version</dt><dd data-k="runtime"></dd>
+          <dt>PID</dt><dd data-k="process.pid"></dd>
+          <dt>Platform</dt><dd data-k="process.platform"></dd>
+          <dt>CPUs</dt><dd data-k="process.cpus"></dd>
+          <dt>Memory</dt><dd data-k="process.memoryMB" data-fmt="mb"></dd>
+          <dt>Uptime</dt><dd data-k="process.uptimeSeconds" data-fmt="duration"></dd>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>S2I build</h2>
+        <dl>
+          <dt>Build</dt><dd data-k="build.name"></dd>
+          <dt>Source</dt><dd data-k="build.source"></dd>
+          <dt>Ref</dt><dd data-k="build.reference"></dd>
+          <dt>Commit</dt><dd data-k="build.commit"></dd>
+        </dl>
+        <p class="hint">S2I injects these as <code>OPENSHIFT_BUILD_*</code>. Empty values mean a binary or local build.</p>
+      </section>
+
+      <section class="card">
+        <h2>Your request</h2>
+        <dl>
+          <dt>Method</dt><dd data-k="request.method"></dd>
+          <dt>Host</dt><dd data-k="request.host"></dd>
+          <dt>Client IP</dt><dd data-k="request.clientIp"></dd>
+          <dt>X-Fwd-For</dt><dd data-k="request.forwardedFor"></dd>
+          <dt>Proto</dt><dd data-k="request.forwardedProto"></dd>
+          <dt>User agent</dt><dd data-k="request.userAgent"></dd>
+        </dl>
+      </section>
+
+      <section class="card span-2">
+        <h2>Load balancing <span class="row"><button id="lb-btn" class="primary">Start</button><button id="lb-reset">Reset</button></span></h2>
+        <p class="hint" style="margin-top:0">
+          Sends <code>GET /api/info</code> every 300&nbsp;ms <b>without cookies</b>, so the router ignores its
+          sticky-session cookie and spreads the requests across replicas. Scale up to see more pods:
+        </p>
+        <div class="cmd">oc scale deployment/<span class="deploy"></span> --replicas=3</div>
+        <div class="row" style="margin-top:14px; gap:24px">
+          <div><div class="big" id="lb-total">0</div><div class="hint" style="margin:4px 0 0">responses</div></div>
+          <div><div class="big" id="lb-pods">0</div><div class="hint" style="margin:4px 0 0">distinct pods</div></div>
+          <div><div class="big" id="lb-errors">0</div><div class="hint" style="margin:4px 0 0">errors</div></div>
+        </div>
+        <div class="bars" id="lb-bars"></div>
+        <div class="strip" id="lb-strip" title="Last 60 responses"></div>
+      </section>
+
+      <section class="card">
+        <h2>Health probes</h2>
+        <div class="probe">
+          <div><b>Liveness</b> <code>/health</code> <span class="pill" id="p-live">…</span></div>
+          <div class="row">
+            <button data-fail="live" data-seconds="90">Fail 90s</button>
+            <button data-fail="live" data-seconds="0">Restore</button>
+          </div>
+        </div>
+        <div class="probe">
+          <div><b>Readiness</b> <code>/ready</code> <span class="pill" id="p-ready">…</span></div>
+          <div class="row">
+            <button data-fail="ready" data-seconds="30">Fail 30s</button>
+            <button data-fail="ready" data-seconds="0">Restore</button>
+          </div>
+        </div>
+        <p class="hint">Failures clear themselves after the timer, so a pod that is not ready can come back on its own. First, add the probes:</p>
+        <div class="cmd">oc set probe deployment/<span class="deploy"></span> --liveness --get-url=http://:8080/health --period-seconds=10
+oc set probe deployment/<span class="deploy"></span> --readiness --get-url=http://:8080/ready --period-seconds=5</div>
+        <p class="hint">Then watch the pods: <code>oc get pods -w</code> (the liveness failure shows up in RESTARTS).</p>
+      </section>
+
+      <section class="card">
+        <h2>CPU stress (HPA)</h2>
+        <div class="row">
+          <select id="stress-sec" aria-label="Duration">
+            <option value="10">10 seconds</option>
+            <option value="30" selected>30 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+          <button id="stress-btn" class="primary">Burn CPU</button>
+        </div>
+        <p class="hint" id="stress-status">Keeps one CPU core busy on this pod.</p>
+        <div class="cmd">oc set resources deployment/<span class="deploy"></span> --requests=cpu=100m
+oc autoscale deployment/<span class="deploy"></span> --cpu-percent=50 --min=1 --max=5
+oc get hpa -w</div>
+      </section>
+
+      <section class="card span-2">
+        <h2>Configuration <span class="hint" style="margin:0;text-transform:none;letter-spacing:0">APP_* environment variables</span></h2>
+        <table>
+          <thead><tr><th style="width:38%">Variable</th><th>Value</th></tr></thead>
+          <tbody id="env-body"><tr><td colspan="2" class="empty">Loading…</td></tr></tbody>
+        </table>
+        <p class="hint"><code>APP_MESSAGE</code> sets the page title and <code>APP_COLOR</code> sets the accent color. Variables whose names contain SECRET, PASSWORD, TOKEN or KEY are masked.</p>
+        <div class="cmd">oc create configmap <span class="deploy"></span>-config --from-literal=APP_MESSAGE="Hello from a ConfigMap" --from-literal=APP_COLOR="#6f42c1"
+oc set env deployment/<span class="deploy"></span> --from=configmap/<span class="deploy"></span>-config
+oc create secret generic <span class="deploy"></span>-secret --from-literal=APP_DB_PASSWORD=s3cr3t
+oc set env deployment/<span class="deploy"></span> --from=secret/<span class="deploy"></span>-secret</div>
+      </section>
+
+      <section class="card span-2">
+        <h2>Endpoints</h2>
+        <div class="endpoints">
+          <a href="/api/info" target="_blank"><span class="m">GET</span>/api/info</a>
+          <a href="/health" target="_blank"><span class="m">GET</span>/health</a>
+          <a href="/ready" target="_blank"><span class="m">GET</span>/ready</a>
+          <a href="#" onclick="return false"><span class="m">POST</span>/api/fail/{live|ready}?seconds=N</a>
+          <a href="#" onclick="return false"><span class="m">POST</span>/api/stress?seconds=N</a>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer>Data refreshes every 5&nbsp;s · <span data-k="time"></span></footer>
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const get = (obj, path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
+  const fmt = {
+    duration(s) {
+      s = Math.floor(s || 0);
+      const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+      return [d && d + 'd', (d || h) && h + 'h', (d || h || m) && m + 'm', (s % 60) + 's'].filter(Boolean).join(' ');
+    },
+    mb: (v) => v + ' MB',
+  };
+
+  let toastTimer;
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // Deployment name from the pod hostname: <deployment>-<replicaset hash>-<pod suffix>
+  function deploymentName(host) {
+    const parts = (host || '').split('-');
+    return parts.length > 2 ? parts.slice(0, -2).join('-') : (host || 'my-app');
+  }
+
+  function render(info) {
+    document.querySelectorAll('[data-k]').forEach((el) => {
+      let v = get(info, el.dataset.k);
+      if (v !== null && v !== undefined && v !== '' && el.dataset.fmt) v = fmt[el.dataset.fmt](v);
+      el.textContent = (v === null || v === undefined || v === '') ? '—' : v;
+    });
+    if (info.accent) document.documentElement.style.setProperty('--accent', info.accent);
+    document.title = `${info.stack} · ${info.pod.hostname}`;
+    document.querySelectorAll('.deploy').forEach((el) => (el.textContent = deploymentName(info.pod.hostname)));
+
+    for (const [id, ok] of [['#p-live', info.probes.live], ['#p-ready', info.probes.ready]]) {
+      const el = $(id);
+      el.textContent = ok ? 'PASSING' : 'FAILING';
+      el.className = 'pill ' + (ok ? 'ok' : 'bad');
+    }
+
+    const rows = Object.entries(info.env || {}).sort(([a], [b]) => a.localeCompare(b));
+    const body = $('#env-body');
+    body.replaceChildren();
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="2" class="empty">No APP_* variables are set. Try the commands below.</td></tr>';
+    }
+    for (const [k, v] of rows) {
+      const tr = document.createElement('tr');
+      const a = document.createElement('td'); a.textContent = k;
+      const b = document.createElement('td'); b.textContent = v;
+      tr.append(a, b);
+      body.append(tr);
+    }
+  }
+
+  async function refresh() {
+    try {
+      const r = await fetch('/api/info', { cache: 'no-store' });
+      render(await r.json());
+      $('#live-dot').classList.remove('off');
+    } catch (e) {
+      $('#live-dot').classList.add('off');
+    }
+  }
+
+  // ---- Load balancing ----
+  const lb = { timer: null, counts: {}, total: 0, errors: 0, recent: [] };
+  const colorFor = (name) => {
+    let h = 0;
+    for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+    return `hsl(${h} 65% 52%)`;
+  };
+  function renderLb() {
+    $('#lb-total').textContent = lb.total;
+    $('#lb-errors').textContent = lb.errors;
+    const names = Object.keys(lb.counts).sort();
+    $('#lb-pods').textContent = names.length;
+    const max = Math.max(1, ...Object.values(lb.counts));
+    $('#lb-bars').replaceChildren(...names.map((n) => {
+      const div = document.createElement('div');
+      div.className = 'bar';
+      const pct = lb.total ? Math.round(lb.counts[n] / lb.total * 100) : 0;
+      div.innerHTML = `<span class="name"></span><span class="mono">${lb.counts[n]} · ${pct}%</span>
+        <div class="track"><div class="fill" style="width:${lb.counts[n] / max * 100}%;background:${colorFor(n)}"></div></div>`;
+      div.querySelector('.name').textContent = n;
+      return div;
+    }));
+    $('#lb-strip').replaceChildren(...lb.recent.map((n) => {
+      const s = document.createElement('span');
+      s.style.background = n ? colorFor(n) : 'var(--bad)';
+      s.title = n || 'error';
+      return s;
+    }));
+  }
+  async function lbTick() {
+    let name = null;
+    try {
+      const r = await fetch('/api/info', { cache: 'no-store', credentials: 'omit' });
+      if (!r.ok) throw new Error(r.status);
+      name = (await r.json()).pod.hostname;
+      lb.counts[name] = (lb.counts[name] || 0) + 1;
+      lb.total++;
+    } catch (e) {
+      lb.errors++;
+    }
+    lb.recent.push(name);
+    if (lb.recent.length > 60) lb.recent.shift();
+    renderLb();
+  }
+  $('#lb-btn').onclick = () => {
+    if (lb.timer) {
+      clearInterval(lb.timer); lb.timer = null; $('#lb-btn').textContent = 'Start';
+    } else {
+      lb.timer = setInterval(lbTick, 300); $('#lb-btn').textContent = 'Stop';
+    }
+  };
+  $('#lb-reset').onclick = () => { Object.assign(lb, { counts: {}, total: 0, errors: 0, recent: [] }); renderLb(); };
+
+  // ---- Probes ----
+  document.querySelectorAll('[data-fail]').forEach((btn) => {
+    btn.onclick = async () => {
+      const { fail, seconds } = btn.dataset;
+      try {
+        const r = await fetch(`/api/fail/${fail}?seconds=${seconds}`, { method: 'POST' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        toast(seconds === '0' ? `${fail} probe restored` : `${fail} probe will fail for ${seconds}s`);
+      } catch (e) {
+        toast('Request failed: ' + e.message);
+      }
+      refresh();
+    };
+  });
+
+  // ---- Stress ----
+  $('#stress-btn').onclick = async () => {
+    const btn = $('#stress-btn'), status = $('#stress-status');
+    const sec = $('#stress-sec').value;
+    btn.disabled = true;
+    status.textContent = `Burning CPU for ${sec}s…`;
+    try {
+      const r = await fetch(`/api/stress?seconds=${sec}`, { method: 'POST' });
+      const j = await r.json();
+      status.textContent = `Done: burned ${j.seconds}s of CPU on ${j.pod}.`;
+    } catch (e) {
+      status.textContent = 'Stress request failed: ' + e.message;
+    }
+    btn.disabled = false;
+  };
+
+  // ---- Copy buttons on command blocks ----
+  document.querySelectorAll('.cmd').forEach((el) => {
+    const b = document.createElement('button');
+    b.textContent = 'Copy';
+    b.onclick = async () => {
+      const text = el.textContent.replace(/Copy$/, '').trim();
+      try { await navigator.clipboard.writeText(text); toast('Copied to clipboard'); }
+      catch (e) { toast('Clipboard is not available (HTTP only?)'); }
+    };
+    el.append(b);
+  });
+
+  refresh();
+  setInterval(refresh, 5000);
+})();
+</script>
+</body>
+</html>
