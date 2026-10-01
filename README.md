@@ -6,6 +6,11 @@
 | php-app      | PHP 8.x (plain)        | `php:8.2-ubi9`              |
 | java-app     | Java 17 + Spring Boot 3| `java:openjdk-17-ubi8`      |
 | ruby-app     | Ruby + Sinatra + Puma  | `ruby:3.3-ubi9`             |
+| php-trigger-app | PHP 8.x, single page | `php:8.2-ubi9`              |
+
+`php-trigger-app` is a one-page app for testing BuildConfig triggers (webhooks):
+change its text, push, and a new build starts. Its commands are in
+`php-trigger-app/COMANDOS.txt`. The rest of this README covers the other four apps.
 
 All apps listen on port **8080** and serve the same dashboard at `/`, with each
 stack's own accent color. The page shows pod, runtime, S2I build and request

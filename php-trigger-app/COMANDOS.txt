@@ -1,0 +1,146 @@
+PHP-TRIGGER-APP - TESTE DE TRIGGERS DE BUILDCONFIG
+===================================================
+
+App PHP de uma pagina so. O texto fica na constante MESSAGE do index.php.
+A pagina tambem mostra o nome da build e o commit, entao da para ver que a
+build nova entrou mesmo quando o texto nao muda.
+
+Repo:        https://github.com/wssaraujo/288-apps.git
+Pasta:       php-trigger-app
+Builder S2I: php:8.2-ubi9   (confira as tags com: oc get is php -n openshift)
+
+
+1. CRIAR A APLICACAO
+--------------------
+
+oc new-project trigger-demo
+
+oc new-app php:8.2-ubi9~https://github.com/wssaraujo/288-apps.git \
+  --context-dir=php-trigger-app \
+  --name=php-trigger-app
+
+oc logs -f bc/php-trigger-app
+oc expose service/php-trigger-app
+oc get route php-trigger-app
+
+O "oc new-app" ja cria o BuildConfig com 4 triggers: ConfigChange,
+ImageChange, GitHub e Generic. Para ver:
+
+oc set triggers bc/php-trigger-app
+oc describe bc/php-trigger-app
+
+
+2. PEGAR A URL E O SECRET DO WEBHOOK
+------------------------------------
+
+O "oc describe" mostra as URLs com <secret> no lugar do valor. Os comandos
+abaixo montam as URLs completas:
+
+API=$(oc whoami --show-server)
+NS=$(oc project -q)
+GH_SECRET=$(oc get bc php-trigger-app -o jsonpath='{.spec.triggers[?(@.type=="GitHub")].github.secret}')
+GEN_SECRET=$(oc get bc php-trigger-app -o jsonpath='{.spec.triggers[?(@.type=="Generic")].generic.secret}')
+
+echo "$API/apis/build.openshift.io/v1/namespaces/$NS/buildconfigs/php-trigger-app/webhooks/$GH_SECRET/github"
+echo "$API/apis/build.openshift.io/v1/namespaces/$NS/buildconfigs/php-trigger-app/webhooks/$GEN_SECRET/generic"
+
+
+3. LIBERAR O WEBHOOK PARA CHAMADAS SEM LOGIN (OpenShift 4.16+)
+--------------------------------------------------------------
+
+O GitHub chama o webhook sem token. A partir do 4.16 os projetos novos nao
+liberam isso por padrao e a chamada volta 403. Para liberar neste projeto:
+
+oc create rolebinding webhook-access-unauthenticated \
+  --clusterrole=system:webhook \
+  --group=system:unauthenticated
+
+
+4. CONFIGURAR O WEBHOOK NO GITHUB
+---------------------------------
+
+No GitHub: repo 288-apps > Settings > Webhooks > Add webhook
+
+  Payload URL:   a URL terminada em /github do passo 2
+  Content type:  application/json      (o padrao, form-urlencoded, nao funciona)
+  Secret:        deixe vazio (o secret ja esta na URL)
+  SSL:           "Disable" se o cluster usa certificado autoassinado
+  Events:        Just the push event
+
+O GitHub manda um "ping" ao salvar. Em "Recent Deliveries" a resposta tem
+que ser 200.
+
+ATENCAO: o GitHub precisa alcancar a API do cluster pela internet. Com
+OpenShift Local (CRC) ou cluster de laboratorio em rede privada ele nao
+alcanca, e a entrega falha. Nesse caso use o passo 6 (webhook generico com
+curl) ou publique a API com um tunel.
+
+
+5. TESTAR: MUDAR O TEXTO E FAZER O COMMIT
+-----------------------------------------
+
+Em um terminal, acompanhe as builds:
+
+oc get builds -w
+
+Em outro, na pasta do repo:
+
+sed -i "s/^const MESSAGE = .*/const MESSAGE = 'Hello from build trigger demo - version 2';/" php-trigger-app/index.php
+git commit -am "php-trigger-app: version 2"
+git push
+
+Deve aparecer a build php-trigger-app-2. Quando terminar, o Deployment faz
+o rollout sozinho (trigger de imagem) e a pagina mostra o texto novo:
+
+oc logs -f bc/php-trigger-app
+oc rollout status deployment/php-trigger-app
+curl -s http://$(oc get route php-trigger-app -o jsonpath='{.spec.host}') | grep '<h1>'
+
+Para ver o que disparou cada build:
+
+oc describe build php-trigger-app-2 | grep -i -A3 'triggered'
+
+Obs.: o webhook do GitHub dispara em qualquer push na branch, mesmo que o
+commit mexa so em outra pasta do repo.
+
+
+6. WEBHOOK GENERICO (sem GitHub, funciona em qualquer cluster)
+--------------------------------------------------------------
+
+Faca o commit e o push como no passo 5 e chame o webhook na mao, com a URL
+terminada em /generic do passo 2:
+
+curl -k -X POST "$API/apis/build.openshift.io/v1/namespaces/$NS/buildconfigs/php-trigger-app/webhooks/$GEN_SECRET/generic"
+
+Se voce nao fez o passo 3, mande o token junto:
+
+curl -k -X POST -H "Authorization: Bearer $(oc whoami -t)" \
+  "$API/apis/build.openshift.io/v1/namespaces/$NS/buildconfigs/php-trigger-app/webhooks/$GEN_SECRET/generic"
+
+Build manual, sem trigger nenhum:
+
+oc start-build php-trigger-app --follow
+
+
+7. ADICIONAR E REMOVER TRIGGERS
+-------------------------------
+
+oc set triggers bc/php-trigger-app                          # lista
+oc set triggers bc/php-trigger-app --from-github            # cria trigger GitHub (secret novo)
+oc set triggers bc/php-trigger-app --from-webhook           # cria trigger Generic (secret novo)
+oc set triggers bc/php-trigger-app --from-github --remove   # remove o GitHub
+oc set triggers bc/php-trigger-app --from-webhook --remove  # remove o Generic
+oc set triggers bc/php-trigger-app --from-config --remove   # remove o ConfigChange
+oc set triggers bc/php-trigger-app --from-image=openshift/php:8.2-ubi9 --remove   # remove o ImageChange
+oc set triggers bc/php-trigger-app --remove-all             # remove todos
+
+Ao recriar um trigger o secret muda: rode o passo 2 de novo e atualize a
+URL no GitHub.
+
+
+8. LIMPAR
+---------
+
+oc delete all -l app=php-trigger-app
+oc delete rolebinding webhook-access-unauthenticated
+oc delete project trigger-demo
